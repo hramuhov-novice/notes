@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Мои заметки и Список дел</title>
+    <!-- Подключаем внешний файл стилей -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <h2>Стикеры</h2>
+    <div>
+        <button id="mainAddBtn">Добавить стикер</button>
+    </div>
+    
+    <hr>
+    
+    <div class="todo-section">
+        <h2>Список дел</h2>
+        <div class="todo-form">
+            <input type="text" id="mainTodoInput" placeholder="Что сделать?">
+            <button id="mainTodoBtn">Добавить</button> 
+            <button id="clearCompletedTodoBtn" class="clear-todo-btn" title="Удалить только выполненные задачи">Очистить выполненные</button>
+        </div>
+        <!-- Сюда будут добавляться дела -->
+        <div class="todo-list" id="todoList"></div>
+    </div>
+
+<script>
+    // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И ИНИЦИАЛИЗАЦИЯ ===
+    const todoInput = document.getElementById('mainTodoInput');
+    const todoList = document.getElementById('todoList');
+
+    // Две начальные заметки по умолчанию (если память браузера пуста)
+    const defaultStickers = [
+        {
+            top: '280px', left: '340px', width: '200px', height: '160px',
+            color: '#fcefa1', isPinned: false, text: ''
+        },
+        {
+            top: '90px', left: '740px', width: '200px', height: '190px',
+            color: '#fcefa1', isPinned: false, 
+            text: 'Ип Богомолов\nИП Витковский\nИП Захаров\nИП Догадин\nИП МАРТЫНОВ\nИП Шаров\nОчень долго находятся в'
+        }
+    ];
+
+    // Загрузка данных при старте страницы
+    window.addEventListener('DOMContentLoaded', () => {
+        loadData();
+    });
+
+    // === ФУНКЦИИ СОХРАНЕНИЯ И ЗАГРУЗКИ (localStorage) ===
+    
+    function saveData() {
+        // Собираем все текущие стикеры
+        const stickersData = [];
+        document.querySelectorAll('.sticker').forEach(sticker => {
+            stickersData.push({
+                top: sticker.style.top,
+                left: sticker.style.left,
+                width: sticker.style.width,
+                height: sticker.style.height,
+                color: sticker.querySelector('.color-picker').value,
+                isPinned: sticker.classList.contains('pinned'),
+                text: sticker.querySelector('.sticker-textarea').value
+            });
+        });
+
+        // Собираем все текущие дела
+        const todosData = [];
+        document.querySelectorAll('.todo-item').forEach(item => {
+            todosData.push({
+                text: item.querySelector('span').innerText,
+                completed: item.querySelector('input[type="checkbox"]').checked
+            });
+        });
+
+        // Записываем в память браузера (в формате JSON-строки)
+        localStorage.setItem('local_stickers', JSON.stringify(stickersData));
+        localStorage.setItem('local_todos', JSON.stringify(todosData));
+    }
+
+    function loadData() {
+        // 1. Загрузка стикеров
+        const savedStickers = localStorage.getItem('local_stickers');
+        const stickersArray = savedStickers ? JSON.parse(savedStickers) : defaultStickers;
+        stickersArray.forEach(data => createStickerDOM(data));
+
+        // 2. Загрузка списка дел
+        const savedTodos = localStorage.getItem('local_todos');
+        if (savedTodos) {
+            const todosArray = JSON.parse(savedTodos);
+            todosArray.forEach(data => createTodoDOM(data.text, data.completed));
+        }
+    }
+
+    // === ЛОГИКА СТИКЕРОВ ===
+
+    function createStickerDOM(data) {
+        const sticker = document.createElement('div');
+        sticker.className = `sticker ${data.isPinned ? 'pinned' : ''}`;
+        
+        sticker.style.top = data.top;
+        sticker.style.left = data.left;
+        sticker.style.width = data.width || '200px';
+        sticker.style.height = data.height || '160px';
+        sticker.style.backgroundColor = data.color;
+        
+        // Корректируем цвет заголовка (делаем чуть темнее основного цвета)
+        sticker.innerHTML = `
+            <div class="sticker-header">
+                <div class="drag-zone">Перетащить</div>
+                <div class="controls">
+                    <input type="color" class="color-picker" value="${data.color}">
+                    <button class="pin-btn" title="Закрепить">📌</button>
+                    <button class="close-btn">X</button>
+                </div>
+            </div>
+            <textarea class="sticker-textarea" placeholder="Текст заметки..."></textarea>
+        `;
+        
+        // Заполняем текст отдельно во избежание проблем со спецсимволами
+        const textarea = sticker.querySelector('.sticker-textarea');
+        textarea.value = data.text;
+
+        document.body.appendChild(sticker);
+        makeStickerWork(sticker);
+    }
+
+    function makeStickerWork(sticker) {
+        const dragZone = sticker.querySelector('.drag-zone');
+        const colorPicker = sticker.querySelector('.color-picker');
+        const pinBtn = sticker.querySelector('.pin-btn');
+        const closeBtn = sticker.querySelector('.close-btn');
+        const textarea = sticker.querySelector('.sticker-textarea');
+        
+        let isPinned = sticker.classList.contains('pinned');
+
+        // Отслеживание ручного изменения размеров (Observer)
+        const resizeObserver = new ResizeObserver(() => {
+            saveData();
+        });
+        resizeObserver.observe(sticker);
+
+        // Изменение цвета
+        colorPicker.addEventListener('input', (e) => {
+            sticker.style.backgroundColor = e.target.value;
+            saveData();
+        });
+
+        // Сохранение текста при вводе
+        textarea.addEventListener('input', () => {
+            saveData();
+        });
+
+        // Закрепление
+        pinBtn.addEventListener('click', () => {
+            isPinned = !isPinned;
+            sticker.classList.toggle('pinned', isPinned);
+            saveData();
+        });
+
+        // Удаление
+        closeBtn.addEventListener('click', () => {
+            resizeObserver.disconnect(); // отключаем слежку за размером перед удалением
+            sticker.remove();
+            saveData();
+        });
+
+        // Перетащить (Drag and Drop)
+        dragZone.addEventListener('mousedown', (e) => {
+            if (sticker.classList.contains('pinned')) return;
+
+            document.querySelectorAll('.sticker').forEach(s => s.style.zIndex = 10);
+            sticker.style.zIndex = 1000;
+
+            const shiftX = e.clientX - sticker.getBoundingClientRect().left;
+            const shiftY = e.clientY - sticker.getBoundingClientRect().top;
+
+            function moveAt(pageX, pageY) {
+                sticker.style.left = (pageX - shiftX) + 'px';
+                sticker.style.top = (pageY - shiftY) + 'px';
+            }
+
+            function onMouseMove(event) {
+                moveAt(event.pageX, event.pageY);
+            }
+
+            document.addEventListener('mousemove', onMouseMove);
+
+            document.addEventListener('mouseup', () => {
+                document.removeEventListener('mousemove', onMouseMove);
+                saveData(); // Сохраняем новые координаты после того, как отпустили мышь
+            }, { once: true });
+        });
+
+        dragZone.ondragstart = () => false;
+    }
+
+    // Создание нового стикера по кнопке
+    document.getElementById('mainAddBtn').addEventListener('click', () => {
+        const randomTop = Math.floor(Math.random() * 150) + 100;
+        const randomLeft = Math.floor(Math.random() * 150) + 340;
+
+        const newData = {
+            top: randomTop + 'px',
+            left: randomLeft + 'px',
+            width: '200px',
+            height: '160px',
+            color: '#fcefa1',
+            isPinned: false,
+            text: ''
+        };
+
+        createStickerDOM(newData);
+        saveData();
+    });
+
+    // === ЛОГИКА СПИСКА ДЕЛ ===
+
+    function createTodoDOM(text, isCompleted = false) {
+        const item = document.createElement('div');
+        item.className = 'todo-item';
+        
+        item.innerHTML = `
+            <input type="checkbox" ${isCompleted ? 'checked' : ''}>
+            <span class="${isCompleted ? 'completed' : ''}">${text}</span>
+        `;
+
+        // Визуальное зачеркивание при клике на чекбокс + автосохранение статуса
+        const checkbox = item.querySelector('input[type="checkbox"]');
+        const span = item.querySelector('span');
+        
+        checkbox.addEventListener('change', () => {
+            if (checkbox.checked) {
+                span.classList.add('completed');
+            } else {
+                span.classList.remove('completed');
+            }
+            saveData();
+        });
+
+        todoList.appendChild(item);
+    }
+
+    // Добавление дела по кнопке
+    document.getElementById('mainTodoBtn').addEventListener('click', () => {
+        const taskText = todoInput.value.trim();
+        if (taskText !== "") {
+            createTodoDOM(taskText, false);
+            todoInput.value = ""; 
+            saveData();
+        }
+    });
+
+    // Позволяет добавлять дела нажатием Enter
+    todoInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            document.getElementById('mainTodoBtn').click();
+        }
+    });
+
+    // НОВАЯ ФУНКЦИЯ: Удаление только выделенных (чекнутых) дел
+    document.getElementById('clearCompletedTodoBtn').addEventListener('click', () => {
+        const items = document.querySelectorAll('.todo-item');
+        let weightsChanged = false;
+
+        items.forEach(item => {
+            const checkbox = item.querySelector('input[type="checkbox"]');
+            if (checkbox && checkbox.checked) {
+                item.remove();
+                weightsChanged = true;
+            }
+        });
+
+        // Перезаписываем хранилище, если были удаления
+        if (weightsChanged) {
+            saveData();
+        }
+    });
+</script>
+
+</body>
+</html>
